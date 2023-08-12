@@ -101,49 +101,70 @@ func displayPreview(filePath string) {
 
 func applyMarkdownStyling(content string) string {
 	var styledText strings.Builder
+	inCodeBlock := false
+	currentCodeLanguage := ""
 
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Apply styling to markdown headers
-		if strings.HasPrefix(line, "# ") {
-			styledText.WriteString("[::b][::u]")
-			styledText.WriteString(strings.TrimPrefix(line, "# "))
-			styledText.WriteString("[::-][::-]\n")
-		} else if strings.HasPrefix(line, "## ") {
-			styledText.WriteString("[::b]")
-			styledText.WriteString(strings.TrimPrefix(line, "## "))
-			styledText.WriteString("[::-]\n")
-		} else if strings.HasPrefix(line, "### ") {
-			styledText.WriteString("[::u]")
-			styledText.WriteString(strings.TrimPrefix(line, "### "))
-			styledText.WriteString("[::-]\n")
-		} else if strings.HasPrefix(line, "**") && strings.HasSuffix(line, "**") {
-			line = strings.TrimPrefix(line, "**")
-			line = strings.TrimSuffix(line, "**")
-			styledText.WriteString("[::b]")
-			styledText.WriteString(line)
-			styledText.WriteString("[::-]\n")
-		} else if strings.HasPrefix(line, "__") && strings.HasSuffix(line, "__") {
-			line = strings.TrimPrefix(line, "__")
-			line = strings.TrimSuffix(line, "__")
-			styledText.WriteString("[::i]")
-			styledText.WriteString(line)
-			styledText.WriteString("[::-]\n")
-		} else if strings.HasPrefix(line, "`") && strings.HasSuffix(line, "`") {
-			line = strings.TrimPrefix(line, "`")
-			line = strings.TrimSuffix(line, "`")
-			styledText.WriteString("[::b][::r]")
-			styledText.WriteString(line)
-			styledText.WriteString("[::-][::-]\n")
-		} else {
+		if strings.HasPrefix(line, "```") {
+			if inCodeBlock {
+				inCodeBlock = false
+				currentCodeLanguage = ""
+				styledText.WriteString("[green::d]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[white]\n")
+			} else {
+				inCodeBlock = true
+				currentCodeLanguage = strings.TrimSpace(strings.TrimPrefix(line, "```"))
+				styledText.WriteString("[::b][::r][::-][::b]" + currentCodeLanguage + "[::-]\n")
+				styledText.WriteString("[green::d]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[white]\n")
+			}
+		} else if inCodeBlock {
 			styledText.WriteString(line + "\n")
+		} else {
+			if strings.HasPrefix(line, "# ") {
+				styledText.WriteString("[::b][::u][yellow]")
+				styledText.WriteString(strings.TrimPrefix(line, "# "))
+				styledText.WriteString("[white]")
+			} else if strings.HasPrefix(line, "## ") {
+				styledText.WriteString("[::b][blue]")
+				styledText.WriteString(strings.TrimPrefix(line, "## "))
+				styledText.WriteString("[white]")
+			} else if strings.HasPrefix(line, "### ") {
+				styledText.WriteString("[::u][red]")
+				styledText.WriteString(strings.TrimPrefix(line, "### "))
+				styledText.WriteString("[white]")
+			} else if strings.HasPrefix(line, "**") && strings.HasSuffix(line, "**") {
+				line = strings.TrimPrefix(line, "**")
+				line = strings.TrimSuffix(line, "**")
+				styledText.WriteString("[::b]")
+				styledText.WriteString(line)
+				styledText.WriteString("[white]")
+			} else if strings.HasPrefix(line, "__") && strings.HasSuffix(line, "__") {
+				line = strings.TrimPrefix(line, "__")
+				line = strings.TrimSuffix(line, "__")
+				styledText.WriteString("[::i]")
+				styledText.WriteString(line)
+				styledText.WriteString("[white]")
+			} else if strings.Contains(line, "`") {
+				sections := strings.Split(line, "`")
+				for i, section := range sections {
+					if i%2 == 0 {
+						styledText.WriteString(section)
+					} else {
+						styledText.WriteString("[#7e7e7e::d][::b]" + section + "[white]")
+					}
+				}
+			} else {
+				styledText.WriteString(line)
+			}
+			styledText.WriteString("\n")
 		}
 	}
 
 	return styledText.String()
 }
+
 func main() {
 	app = tview.NewApplication()
 
@@ -173,7 +194,12 @@ func main() {
 		SetRoot(rootNode).
 		SetCurrentNode(rootNode)
 
-	// currentNode := rootNode // Define the currentNode
+	treeFrame := tview.NewFrame(tree).
+		SetBorders(0, 0, 1, 0, 1, 1) // Add a border around the tree
+
+	previewFlex = tview.NewFlex().
+		AddItem(treeFrame, 0, 1, true).
+		AddItem(previewWindow, 0, 2, previewVisible)
 
 	for _, file := range fileList {
 		// Check if the file should be ignored
