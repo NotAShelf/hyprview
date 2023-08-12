@@ -1,169 +1,13 @@
 package main
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
-
-type Config struct {
-	IgnoreFiles []string `json:"ignoreFiles"`
-}
-
-var (
-	app            *tview.Application
-	tree           *tview.TreeView
-	rootNode       *tview.TreeNode
-	rootPath       = "pages" // Update with your root directory
-	previewWindow  *tview.TextView
-	previewFlex    *tview.Flex
-	previewVisible = false
-	nodesByDir     = make(map[string]*tview.TreeNode) // Map to store tree nodes by directory
-)
-
-func fetchFileList(dirPath string) ([]string, error) {
-	var fileList []string
-
-	return fileList, filepath.WalkDir(dirPath, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() && strings.HasSuffix(d.Name(), ".md") {
-			relPath, err := filepath.Rel(rootPath, path)
-			if err != nil {
-				return err
-			}
-			fileList = append(fileList, relPath)
-		}
-		return nil
-	})
-}
-
-func fetchFileContents(filePath string) (string, error) {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return "", err
-	}
-	return string(content), nil
-}
-
-func togglePreview() {
-	previewVisible = !previewVisible
-	if previewVisible {
-		app.SetRoot(previewFlex, true)
-		app.SetFocus(previewWindow)
-	} else {
-		app.SetRoot(tree, true)
-		app.SetFocus(tree)
-	}
-}
-
-func createPreviewFlex() *tview.Flex {
-	previewWindow = tview.NewTextView().
-		SetDynamicColors(true).
-		SetTextAlign(tview.AlignLeft).
-		SetScrollable(true).
-		SetWordWrap(true)
-
-	// Add a border around the preview window
-	previewWindow.SetBorder(true)
-
-	previewFlex = tview.NewFlex().
-		AddItem(tree, 0, 1, true).
-		AddItem(previewWindow, 0, 2, previewVisible)
-
-	// Add a border around the entire flex layout and set a title
-	previewFlex.SetBorder(true).SetTitle(" Preview ")
-
-	return previewFlex
-}
-
-func displayPreview(filePath string) {
-	content, err := fetchFileContents(filePath)
-	if err != nil {
-		content = fmt.Sprintf("Error: %v", err)
-	}
-
-	// Apply markdown styling to the content
-	styledText := applyMarkdownStyling(content)
-
-	// Set the styled markdown content to the preview window
-	previewWindow.SetText(styledText).
-		SetTextAlign(tview.AlignLeft)
-	togglePreview()
-}
-
-func applyMarkdownStyling(content string) string {
-	var styledText strings.Builder
-	inCodeBlock := false
-	currentCodeLanguage := ""
-
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		if strings.HasPrefix(line, "```") {
-			if inCodeBlock {
-				inCodeBlock = false
-				currentCodeLanguage = ""
-				styledText.WriteString("[green::d]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[white]\n")
-			} else {
-				inCodeBlock = true
-				currentCodeLanguage = strings.TrimSpace(strings.TrimPrefix(line, "```"))
-				styledText.WriteString("[::b][::r][::-][::b]" + currentCodeLanguage + "[::-]\n")
-				styledText.WriteString("[green::d]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[white]\n")
-			}
-		} else if inCodeBlock {
-			styledText.WriteString(line + "\n")
-		} else {
-			if strings.HasPrefix(line, "# ") {
-				styledText.WriteString("[::b][::u][yellow]")
-				styledText.WriteString(strings.TrimPrefix(line, "# "))
-				styledText.WriteString("[white]")
-			} else if strings.HasPrefix(line, "## ") {
-				styledText.WriteString("[::b][blue]")
-				styledText.WriteString(strings.TrimPrefix(line, "## "))
-				styledText.WriteString("[white]")
-			} else if strings.HasPrefix(line, "### ") {
-				styledText.WriteString("[::u][red]")
-				styledText.WriteString(strings.TrimPrefix(line, "### "))
-				styledText.WriteString("[white]")
-			} else if strings.HasPrefix(line, "**") && strings.HasSuffix(line, "**") {
-				line = strings.TrimPrefix(line, "**")
-				line = strings.TrimSuffix(line, "**")
-				styledText.WriteString("[::b]")
-				styledText.WriteString(line)
-				styledText.WriteString("[white]")
-			} else if strings.HasPrefix(line, "__") && strings.HasSuffix(line, "__") {
-				line = strings.TrimPrefix(line, "__")
-				line = strings.TrimSuffix(line, "__")
-				styledText.WriteString("[::i]")
-				styledText.WriteString(line)
-				styledText.WriteString("[white]")
-			} else if strings.Contains(line, "`") {
-				sections := strings.Split(line, "`")
-				for i, section := range sections {
-					if i%2 == 0 {
-						styledText.WriteString(section)
-					} else {
-						styledText.WriteString("[#7e7e7e::d][::b]" + section + "[white]")
-					}
-				}
-			} else {
-				styledText.WriteString(line)
-			}
-			styledText.WriteString("\n")
-		}
-	}
-
-	return styledText.String()
-}
 
 func main() {
 	app = tview.NewApplication()
@@ -176,15 +20,9 @@ func main() {
 	}
 
 	// Read the configuration
-	configData, err := os.ReadFile("config.json")
+	config, err := readConfig()
 	if err != nil {
-		fmt.Println("Error reading config file:", err)
-		return
-	}
-
-	var config Config
-	if err := json.Unmarshal(configData, &config); err != nil {
-		fmt.Println("Error decoding config data:", err)
+		fmt.Println(err)
 		return
 	}
 
